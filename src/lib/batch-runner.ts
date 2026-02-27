@@ -408,7 +408,7 @@ async function runBatchExecution(config: BatchExecutionConfig): Promise<void> {
         safetyMode,
     } = config;
 
-    const selectedModel = model || 'gemini-1.5-flash';
+    const selectedModel = model || 'gemini-2.5-flash';
     const resolvedApiKey = process.env.GEMINI_API_KEY || apiKey;
     if (!resolvedApiKey) {
         throw new Error('No Gemini API key configured. Set GEMINI_API_KEY or provide apiKey.');

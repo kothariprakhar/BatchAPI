@@ -41,7 +41,7 @@ import {
 export default function BuilderPage() {
     const router = useRouter();
     const { apiKey, isValid: apiKeyValid } = useApiKey();
-    const selectedModel = 'gemini-1.5-flash';
+    const selectedModel = 'gemini-2.5-flash';
 
     // Prompt state
     const [systemPrompt, setSystemPrompt] = useState('');
@@ -360,7 +360,7 @@ export default function BuilderPage() {
                             Run Batch Job
                         </DialogTitle>
                         <DialogDescription>
-                            Execute {rows.length} prompt{rows.length !== 1 ? 's' : ''} against Gemini 1.5 Flash
+                            Execute {rows.length} prompt{rows.length !== 1 ? 's' : ''} against Gemini 2.5 Flash
                         </DialogDescription>
                     </DialogHeader>
 

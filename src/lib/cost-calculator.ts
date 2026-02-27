@@ -2,12 +2,12 @@
  * Cost Calculator
  *
  * Estimates the $ saved by using batch mode (50% discount)
- * vs. standard API pricing for Gemini 1.5 Flash.
+ * vs. standard API pricing for Gemini 2.5 Flash.
  */
 
-// Pricing per 1M tokens (USD) — Gemini 1.5 Flash
+// Pricing per 1M tokens (USD) — Gemini 2.5 Flash
 const PRICING = {
-    'gemini-1.5-flash': {
+    'gemini-2.5-flash': {
         standard: { input: 0.075, output: 0.30 },
         batch: { input: 0.0375, output: 0.15 },
     },
@@ -25,7 +25,7 @@ export function calculateSavings(
     promptTokens: number,
     completionTokens: number
 ): CostEstimate {
-    const pricing = PRICING[model as keyof typeof PRICING] ?? PRICING['gemini-1.5-flash'];
+    const pricing = PRICING[model as keyof typeof PRICING] ?? PRICING['gemini-2.5-flash'];
 
     const standardCostUsd =
         (promptTokens / 1_000_000) * pricing.standard.input +

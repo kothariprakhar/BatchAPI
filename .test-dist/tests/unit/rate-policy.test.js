@@ -7,12 +7,12 @@ const node_test_1 = __importDefault(require("node:test"));
 const strict_1 = __importDefault(require("node:assert/strict"));
 const rate_policy_1 = require("../../src/lib/rate-policy");
 (0, node_test_1.default)('returns policy for known flash model', () => {
-    const policy = (0, rate_policy_1.getRatePolicy)('gemini-1.5-flash');
+    const policy = (0, rate_policy_1.getRatePolicy)('gemini-2.5-flash');
     strict_1.default.equal(policy.standardRpm, 15);
     strict_1.default.equal(policy.safetyRpm, 10);
 });
 (0, node_test_1.default)('returns policy for known pro model', () => {
-    const policy = (0, rate_policy_1.getRatePolicy)('gemini-1.5-pro');
+    const policy = (0, rate_policy_1.getRatePolicy)('gemini-2.5-pro');
     strict_1.default.equal(policy.standardRpm, 2);
     strict_1.default.equal(policy.safetyRpm, 1);
 });

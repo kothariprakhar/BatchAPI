@@ -9,11 +9,11 @@ const DEFAULT_POLICY: RatePolicy = {
 };
 
 const MODEL_RATE_POLICIES: Record<string, RatePolicy> = {
-    'gemini-1.5-flash': {
+    'gemini-2.5-flash': {
         standardRpm: 15,
         safetyRpm: 10,
     },
-    'gemini-1.5-pro': {
+    'gemini-2.5-pro': {
         standardRpm: 2,
         safetyRpm: 1,
     },

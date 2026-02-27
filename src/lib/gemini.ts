@@ -20,7 +20,7 @@ export function clearStoredApiKey(): void {
 export async function validateApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         await model.generateContent('Say "ok"');
         return { valid: true };
     } catch (error: unknown) {
@@ -54,7 +54,7 @@ export interface GenerateResult {
 export async function generateContent(options: GenerateOptions): Promise<GenerateResult> {
     const {
         apiKey,
-        model = 'gemini-1.5-flash',
+        model = 'gemini-2.5-flash',
         systemPrompt,
         userPrompt,
         temperature = 0.7,

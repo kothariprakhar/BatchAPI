@@ -63,7 +63,7 @@ export function compileToJsonlObjects(options: CompileOptions): JsonlRequest[] {
     const {
         userPromptTemplate,
         systemPrompt,
-        model = 'gemini-1.5-flash',
+        model = 'gemini-2.5-flash',
         temperature = 0.7,
         maxOutputTokens = 1024,
         rows,

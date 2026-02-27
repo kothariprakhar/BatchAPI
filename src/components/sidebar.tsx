@@ -7,6 +7,7 @@ import {
     LayoutDashboard,
     Hammer,
     BookTemplate,
+    GitCompare,
     ChevronLeft,
     ChevronRight,
 } from 'lucide-react';
@@ -33,6 +34,12 @@ const navItems = [
         href: '/templates',
         icon: BookTemplate,
         description: 'Starter prompt templates',
+    },
+    {
+        label: 'Compare',
+        href: '/compare',
+        icon: GitCompare,
+        description: 'Run side-by-side evaluations',
     },
 ];
 

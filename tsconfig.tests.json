@@ -9,12 +9,17 @@
     "outDir": ".test-dist",
     "rootDir": ".",
     "types": ["node"],
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": [
     "src/lib/rate-policy.ts",
     "src/lib/rate-limited-queue.ts",
     "src/lib/error-utils.ts",
+    "src/lib/compare.ts",
     "tests/**/*.ts"
   ]
 }

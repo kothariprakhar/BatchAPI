@@ -5,7 +5,9 @@ import { supabase, getDeviceId } from '@/lib/supabase';
 import { JobCard, getQueueStatus, type Job } from '@/components/job-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, RefreshCw, Inbox } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { LayoutDashboard, RefreshCw, Inbox, GitCompare } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useApiKey } from '@/lib/api-key-context';
@@ -44,11 +46,54 @@ export default function DashboardPage() {
         enabled: !!deviceId,
         refetchInterval: 30000, // Poll every 30 seconds
     });
+    const { data: compareSessions } = useQuery({
+        queryKey: ['compare-sessions', deviceId],
+        queryFn: async (): Promise<CompareSession[]> => {
+            if (!deviceId) return [];
+
+            const { data: projects } = await supabase
+                .from('projects')
+                .select('id')
+                .eq('device_id', deviceId);
+
+            if (!projects?.length) return [];
+            const projectIds = projects.map((project) => project.id);
+
+            const { data, error } = await supabase
+                .from('compare_sessions')
+                .select('*')
+                .in('project_id', projectIds)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            const sessions = (data as CompareSession[]) ?? [];
+            const refreshed = await Promise.all(
+                sessions.map(async (session) => {
+                    const response = await fetch(`/api/compare/${session.id}`);
+                    if (!response.ok) return session;
+                    const payload = await response.json();
+                    return {
+                        ...session,
+                        status: payload.status ?? session.status,
+                        total_cases: payload.total_cases ?? session.total_cases,
+                        completed_cases: payload.completed_cases ?? session.completed_cases,
+                        failed_cases: payload.failed_cases ?? session.failed_cases,
+                    } as CompareSession;
+                })
+            );
+            return refreshed;
+        },
+        enabled: !!deviceId,
+        refetchInterval: 30000,
+    });
 
     const hasRunningJobs = jobs?.some((j) => {
         const queueStatus = getQueueStatus(j);
         return queueStatus === 'queued' || queueStatus === 'running' || queueStatus === 'paused' || queueStatus === 'retry_wait';
     });
+    const hasRunningCompareSessions = compareSessions?.some((session) =>
+        ['queued', 'running'].includes(session.status)
+    );
     const activeJobIds = useMemo(
         () =>
             (jobs ?? [])
@@ -122,7 +167,7 @@ export default function DashboardPage() {
                         <h1 className="text-2xl font-bold tracking-tight">Jobs Dashboard</h1>
                         <p className="text-sm text-muted-foreground">
                             Monitor batch job progress and view results
-                            {hasRunningJobs && (
+                            {(hasRunningJobs || hasRunningCompareSessions) && (
                                 <span className="ml-2 text-blue-400">• Auto-refreshing every 30s</span>
                             )}
                         </p>
@@ -174,6 +219,54 @@ export default function DashboardPage() {
                     </Link>
                 </div>
             )}
+
+            {/* Compare Sessions */}
+            {compareSessions && compareSessions.length > 0 && (
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                        <GitCompare className="h-4 w-4 text-muted-foreground" />
+                        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                            Compare Sessions
+                        </h2>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {compareSessions.map((session) => (
+                            <Card key={session.id} className="bg-card/50 border-border">
+                                <CardContent className="pt-5 space-y-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <p className="text-sm font-semibold">{session.name}</p>
+                                            <p className="text-xs text-muted-foreground">{session.compare_type}</p>
+                                        </div>
+                                        <Badge variant="outline" className="text-[10px]">
+                                            {session.status}
+                                        </Badge>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                        {session.completed_cases} / {session.total_cases} completed
+                                    </div>
+                                    <Link href={`/compare/${session.id}`}>
+                                        <Button variant="outline" size="sm" className="w-full text-xs">
+                                            Open Compare
+                                        </Button>
+                                    </Link>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
+}
+
+interface CompareSession {
+    id: string;
+    name: string;
+    compare_type: string;
+    status: string;
+    total_cases: number;
+    completed_cases: number;
+    failed_cases: number;
+    created_at: string;
 }

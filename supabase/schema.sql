@@ -74,17 +74,68 @@ CREATE TABLE IF NOT EXISTS batch_results (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Compare sessions: left vs right job orchestration
+CREATE TABLE IF NOT EXISTS compare_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  compare_type TEXT NOT NULL
+    CHECK (compare_type IN ('prompt_vs_prompt','model_vs_model')),
+  status TEXT DEFAULT 'queued'
+    CHECK (status IN ('queued','running','completed','partial_failed','failed','cancelled')),
+  left_job_id UUID REFERENCES batch_jobs(id),
+  right_job_id UUID REFERENCES batch_jobs(id),
+  total_cases INT DEFAULT 0,
+  completed_cases INT DEFAULT 0,
+  failed_cases INT DEFAULT 0,
+  last_error TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
+-- Canonical case mapping for left/right comparisons
+CREATE TABLE IF NOT EXISTS compare_cases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  compare_session_id UUID REFERENCES compare_sessions(id) ON DELETE CASCADE,
+  row_index INT NOT NULL,
+  input_variables JSONB NOT NULL,
+  compiled_left_prompt TEXT NOT NULL,
+  compiled_right_prompt TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Materialized pair-level diff snapshot
+CREATE TABLE IF NOT EXISTS compare_results (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  compare_case_id UUID REFERENCES compare_cases(id) ON DELETE CASCADE,
+  left_result_id UUID REFERENCES batch_results(id) ON DELETE CASCADE,
+  right_result_id UUID REFERENCES batch_results(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'pending'
+    CHECK (status IN ('pending','completed','failed')),
+  diff_summary JSONB DEFAULT '{}',
+  flags_json JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (compare_case_id)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_batch_results_job ON batch_results(job_id);
 CREATE INDEX IF NOT EXISTS idx_batch_jobs_project ON batch_jobs(project_id);
 CREATE INDEX IF NOT EXISTS idx_prompt_templates_project ON prompt_templates(project_id);
 CREATE INDEX IF NOT EXISTS idx_projects_device ON projects(device_id);
+CREATE INDEX IF NOT EXISTS idx_compare_sessions_project ON compare_sessions(project_id);
+CREATE INDEX IF NOT EXISTS idx_compare_cases_session ON compare_cases(compare_session_id);
+CREATE INDEX IF NOT EXISTS idx_compare_results_case ON compare_results(compare_case_id);
 
 -- Enable Row Level Security
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE prompt_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE batch_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE batch_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE compare_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE compare_cases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE compare_results ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies: Allow all operations for now (no auth)
 -- In production, you'd scope these by auth.uid()
@@ -92,3 +143,6 @@ CREATE POLICY "Allow all on projects" ON projects FOR ALL USING (true) WITH CHEC
 CREATE POLICY "Allow all on prompt_templates" ON prompt_templates FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on batch_jobs" ON batch_jobs FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on batch_results" ON batch_results FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on compare_sessions" ON compare_sessions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on compare_cases" ON compare_cases FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on compare_results" ON compare_results FOR ALL USING (true) WITH CHECK (true);

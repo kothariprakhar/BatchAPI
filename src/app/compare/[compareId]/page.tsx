@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { exportCompareToCsv, exportCompareToJson } from '@/lib/export';
 import {
     Select,
     SelectContent,
@@ -25,6 +26,8 @@ import {
     AlertTriangle,
     CheckCircle2,
     XCircle,
+    FileJson2,
+    FileSpreadsheet,
 } from 'lucide-react';
 
 interface ComparePair {
@@ -122,6 +125,64 @@ export default function CompareResultsPage() {
             : Math.min(selectedIndex, filteredPairs.length - 1);
     const currentPair = filteredPairs[safeSelectedIndex] ?? null;
 
+    const handleExportCsv = () => {
+        if (!pairsQuery.data || pairsQuery.data.length === 0) return;
+        const exportRows = pairsQuery.data.map((pair) => ({
+            row: pair.rowIndex + 1,
+            input_variables: pair.inputVariables,
+            left_prompt: pair.leftPrompt,
+            right_prompt: pair.rightPrompt,
+            left_output: pair.leftOutput,
+            right_output: pair.rightOutput,
+            left_status: pair.leftStatus,
+            right_status: pair.rightStatus,
+            left_latency_ms: pair.leftLatencyMs,
+            right_latency_ms: pair.rightLatencyMs,
+            left_tokens: pair.leftTokens,
+            right_tokens: pair.rightTokens,
+            pair_status: pair.pairStatus,
+            changed: pair.diffSummary.changed,
+            length_delta: pair.diffSummary.lengthDelta,
+            first_difference_at: pair.diffSummary.firstDifferenceAt,
+            formatting_shift: pair.flags.formattingShift,
+            possible_hallucination_shift: pair.flags.possibleHallucinationShift,
+            major_length_shift: pair.flags.majorLengthShift,
+        }));
+        exportCompareToCsv(
+            exportRows,
+            (summaryQuery.data?.name ?? `compare-${compareId}`).replace(/\s+/g, '-')
+        );
+    };
+
+    const handleExportJson = () => {
+        if (!pairsQuery.data || pairsQuery.data.length === 0) return;
+        const exportRows = pairsQuery.data.map((pair) => ({
+            row: pair.rowIndex + 1,
+            input_variables: pair.inputVariables,
+            left_prompt: pair.leftPrompt,
+            right_prompt: pair.rightPrompt,
+            left_output: pair.leftOutput,
+            right_output: pair.rightOutput,
+            left_status: pair.leftStatus,
+            right_status: pair.rightStatus,
+            left_latency_ms: pair.leftLatencyMs,
+            right_latency_ms: pair.rightLatencyMs,
+            left_tokens: pair.leftTokens,
+            right_tokens: pair.rightTokens,
+            pair_status: pair.pairStatus,
+            changed: pair.diffSummary.changed,
+            length_delta: pair.diffSummary.lengthDelta,
+            first_difference_at: pair.diffSummary.firstDifferenceAt,
+            formatting_shift: pair.flags.formattingShift,
+            possible_hallucination_shift: pair.flags.possibleHallucinationShift,
+            major_length_shift: pair.flags.majorLengthShift,
+        }));
+        exportCompareToJson(
+            exportRows,
+            (summaryQuery.data?.name ?? `compare-${compareId}`).replace(/\s+/g, '-')
+        );
+    };
+
     if (summaryQuery.isLoading || pairsQuery.isLoading) {
         return (
             <div className="space-y-6">
@@ -148,10 +209,20 @@ export default function CompareResultsPage() {
                         </p>
                     </div>
                 </div>
-                <Badge variant="outline" className="gap-2">
-                    <GitCompare className="h-3.5 w-3.5" />
-                    {summaryQuery.data?.completed_cases ?? 0}/{summaryQuery.data?.total_cases ?? 0} done
-                </Badge>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="gap-2" onClick={handleExportCsv}>
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        CSV
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-2" onClick={handleExportJson}>
+                        <FileJson2 className="h-3.5 w-3.5" />
+                        JSON
+                    </Button>
+                    <Badge variant="outline" className="gap-2">
+                        <GitCompare className="h-3.5 w-3.5" />
+                        {summaryQuery.data?.completed_cases ?? 0}/{summaryQuery.data?.total_cases ?? 0} done
+                    </Badge>
+                </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">

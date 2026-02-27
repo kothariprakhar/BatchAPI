@@ -15,6 +15,28 @@ interface ExportResult {
     error: string | null;
 }
 
+interface CompareExportResult {
+    row: number;
+    input_variables: Record<string, string>;
+    left_prompt: string;
+    right_prompt: string;
+    left_output: string | null;
+    right_output: string | null;
+    left_status: string | null;
+    right_status: string | null;
+    left_latency_ms: number | null;
+    right_latency_ms: number | null;
+    left_tokens: number;
+    right_tokens: number;
+    pair_status: 'pending' | 'completed' | 'failed';
+    changed: boolean;
+    length_delta: number;
+    first_difference_at: number;
+    formatting_shift: boolean;
+    possible_hallucination_shift: boolean;
+    major_length_shift: boolean;
+}
+
 export function exportToCsv(results: ExportResult[], jobName: string): void {
     if (results.length === 0) return;
 
@@ -57,6 +79,67 @@ export function exportToCsv(results: ExportResult[], jobName: string): void {
 export function exportToJson(results: ExportResult[], jobName: string): void {
     const json = JSON.stringify(results, null, 2);
     downloadFile(json, `${jobName}.json`, 'application/json');
+}
+
+export function exportCompareToCsv(results: CompareExportResult[], compareName: string): void {
+    if (results.length === 0) return;
+
+    const variableKeys = new Set<string>();
+    results.forEach((result) => {
+        Object.keys(result.input_variables).forEach((key) => variableKeys.add(key));
+    });
+
+    const headers = [
+        'Row',
+        ...Array.from(variableKeys),
+        'Left Prompt',
+        'Right Prompt',
+        'Left Output',
+        'Right Output',
+        'Left Status',
+        'Right Status',
+        'Pair Status',
+        'Left Latency (ms)',
+        'Right Latency (ms)',
+        'Left Tokens',
+        'Right Tokens',
+        'Changed',
+        'Length Delta',
+        'First Difference At',
+        'Formatting Shift',
+        'Possible Hallucination Shift',
+        'Major Length Shift',
+    ];
+
+    const rows = results.map((result) => [
+        result.row,
+        ...Array.from(variableKeys).map((key) => escapeCsv(result.input_variables[key] ?? '')),
+        escapeCsv(result.left_prompt),
+        escapeCsv(result.right_prompt),
+        escapeCsv(result.left_output ?? ''),
+        escapeCsv(result.right_output ?? ''),
+        result.left_status ?? '',
+        result.right_status ?? '',
+        result.pair_status,
+        result.left_latency_ms ?? '',
+        result.right_latency_ms ?? '',
+        result.left_tokens,
+        result.right_tokens,
+        result.changed,
+        result.length_delta,
+        result.first_difference_at,
+        result.formatting_shift,
+        result.possible_hallucination_shift,
+        result.major_length_shift,
+    ]);
+
+    const csv = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    downloadFile(csv, `${compareName}.csv`, 'text/csv');
+}
+
+export function exportCompareToJson(results: CompareExportResult[], compareName: string): void {
+    const json = JSON.stringify(results, null, 2);
+    downloadFile(json, `${compareName}.json`, 'application/json');
 }
 
 function escapeCsv(value: string): string {

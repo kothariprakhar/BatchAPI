@@ -11,6 +11,8 @@ import {
     XCircle,
     Loader2,
     ArrowRight,
+    RotateCcw,
+    Square,
     DollarSign,
     Zap,
 } from 'lucide-react';
@@ -19,6 +21,7 @@ import Link from 'next/link';
 export interface Job {
     id: string;
     name: string;
+    queue_status?: string | null;
     status: string;
     total_requests: number;
     completed_requests: number;
@@ -31,16 +34,56 @@ export interface Job {
     created_at: string;
 }
 
+type QueueStatus =
+    | 'queued'
+    | 'running'
+    | 'paused'
+    | 'retry_wait'
+    | 'completed'
+    | 'failed'
+    | 'cancelled';
+
+export function getQueueStatus(job: Job): QueueStatus {
+    const raw = job.queue_status ?? job.status;
+    if (raw === 'pending') return 'queued';
+    if (
+        raw === 'queued' ||
+        raw === 'running' ||
+        raw === 'paused' ||
+        raw === 'retry_wait' ||
+        raw === 'completed' ||
+        raw === 'failed' ||
+        raw === 'cancelled'
+    ) {
+        return raw;
+    }
+    return 'queued';
+}
+
 const statusConfig = {
+    queued: { icon: Clock, color: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/20', label: 'Queued' },
     pending: { icon: Clock, color: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/20', label: 'Pending' },
     running: { icon: Loader2, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', label: 'Running' },
+    paused: { icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', label: 'Paused' },
+    retry_wait: { icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', label: 'Retry Wait' },
     completed: { icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', label: 'Completed' },
     failed: { icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20', label: 'Failed' },
     cancelled: { icon: XCircle, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', label: 'Cancelled' },
 } as const;
 
-export function JobCard({ job }: { job: Job }) {
-    const config = statusConfig[job.status as keyof typeof statusConfig] ?? statusConfig.pending;
+export function JobCard({
+    job,
+    onCancel,
+    onResume,
+    actionBusy = false,
+}: {
+    job: Job;
+    onCancel?: (job: Job) => Promise<void>;
+    onResume?: (job: Job) => Promise<void>;
+    actionBusy?: boolean;
+}) {
+    const queueStatus = getQueueStatus(job);
+    const config = statusConfig[queueStatus] ?? statusConfig.queued;
     const StatusIcon = config.icon;
     const progress = job.total_requests > 0
         ? ((job.completed_requests + job.failed_requests) / job.total_requests) * 100
@@ -61,7 +104,7 @@ export function JobCard({ job }: { job: Job }) {
             <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                     <div className={cn('flex items-center justify-center w-9 h-9 rounded-lg', config.bg)}>
-                        <StatusIcon className={cn('h-4 w-4', config.color, job.status === 'running' && 'animate-spin')} />
+                        <StatusIcon className={cn('h-4 w-4', config.color, queueStatus === 'running' && 'animate-spin')} />
                     </div>
                     <div>
                         <h3 className="font-semibold text-sm">{job.name}</h3>
@@ -74,7 +117,7 @@ export function JobCard({ job }: { job: Job }) {
             </div>
 
             {/* Progress Bar */}
-            {(job.status === 'running' || job.status === 'completed') && (
+            {(queueStatus === 'running' || queueStatus === 'completed' || queueStatus === 'paused' || queueStatus === 'retry_wait') && (
                 <div className="mb-4 space-y-1.5">
                     <div className="flex justify-between text-[10px] text-muted-foreground">
                         <span>{job.completed_requests} / {job.total_requests} completed</span>
@@ -111,7 +154,7 @@ export function JobCard({ job }: { job: Job }) {
             </div>
 
             {/* View Results */}
-            {job.status === 'completed' && (
+            {queueStatus === 'completed' && (
                 <div className="mt-4 pt-4 border-t border-border">
                     <Link href={`/results/${job.id}`}>
                         <Button variant="outline" size="sm" className="w-full gap-2 text-xs">
@@ -119,6 +162,36 @@ export function JobCard({ job }: { job: Job }) {
                             <ArrowRight className="h-3 w-3" />
                         </Button>
                     </Link>
+                </div>
+            )}
+
+            {(queueStatus === 'queued' || queueStatus === 'running' || queueStatus === 'paused' || queueStatus === 'retry_wait') && onCancel && (
+                <div className="mt-4 pt-4 border-t border-border">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-2 text-xs"
+                        disabled={actionBusy}
+                        onClick={() => void onCancel(job)}
+                    >
+                        <Square className="h-3 w-3" />
+                        Cancel
+                    </Button>
+                </div>
+            )}
+
+            {(queueStatus === 'cancelled' || queueStatus === 'failed') && onResume && (
+                <div className="mt-4 pt-4 border-t border-border">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-2 text-xs"
+                        disabled={actionBusy}
+                        onClick={() => void onResume(job)}
+                    >
+                        <RotateCcw className="h-3 w-3" />
+                        Resume
+                    </Button>
                 </div>
             )}
 

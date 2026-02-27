@@ -24,7 +24,6 @@ import {
     ChevronLeft,
     ChevronRight,
     Copy,
-    Download,
     FileJson2,
     FileSpreadsheet,
     CheckCircle2,

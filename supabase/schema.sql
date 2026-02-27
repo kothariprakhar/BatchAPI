@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS batch_jobs (
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   template_id UUID REFERENCES prompt_templates(id),
   name TEXT NOT NULL,
+  queue_status TEXT DEFAULT 'queued'
+    CHECK (queue_status IN ('queued','running','paused','retry_wait','completed','failed','cancelled')),
   status TEXT DEFAULT 'pending'
     CHECK (status IN ('pending','running','completed','failed','cancelled')),
   total_requests INT DEFAULT 0,
@@ -42,6 +44,11 @@ CREATE TABLE IF NOT EXISTS batch_jobs (
   generation_config JSONB DEFAULT '{}',
   safety_mode BOOLEAN DEFAULT false,
   estimated_savings_usd NUMERIC(10,6) DEFAULT 0,
+  retry_count INT DEFAULT 0,
+  last_error TEXT,
+  paused_until TIMESTAMPTZ,
+  heartbeat_at TIMESTAMPTZ,
+  cancel_requested BOOLEAN DEFAULT false,
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -57,9 +64,13 @@ CREATE TABLE IF NOT EXISTS batch_results (
   output TEXT,
   token_usage JSONB DEFAULT '{}',
   latency_ms INT,
+  retry_count INT DEFAULT 0,
+  error_code INT,
+  error_type TEXT,
   status TEXT DEFAULT 'pending'
     CHECK (status IN ('pending','running','completed','failed')),
   error TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

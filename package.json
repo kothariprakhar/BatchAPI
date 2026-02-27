@@ -6,7 +6,10 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:build": "rm -rf .test-dist && tsc -p tsconfig.tests.json",
+    "test:unit": "npm run test:build && node --test .test-dist/tests/unit/*.test.js",
+    "test:integration": "npm run test:build && node --test .test-dist/tests/integration/*.test.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

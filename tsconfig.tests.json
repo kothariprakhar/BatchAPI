@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": ".test-dist",
+    "rootDir": ".",
+    "types": ["node"],
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src/lib/rate-policy.ts",
+    "src/lib/rate-limited-queue.ts",
+    "src/lib/error-utils.ts",
+    "tests/**/*.ts"
+  ]
+}

@@ -27,6 +27,7 @@ import {
     type VariableRow,
     type CompileOptions,
 } from '@/lib/jsonl-compiler';
+import { getEffectiveRpm } from '@/lib/rate-policy';
 import {
     Hammer,
     Play,
@@ -40,6 +41,7 @@ import {
 export default function BuilderPage() {
     const router = useRouter();
     const { apiKey, isValid: apiKeyValid } = useApiKey();
+    const selectedModel = 'gemini-1.5-flash';
 
     // Prompt state
     const [systemPrompt, setSystemPrompt] = useState('');
@@ -53,6 +55,7 @@ export default function BuilderPage() {
     // UI state
     const [isRunning, setIsRunning] = useState(false);
     const [showRunDialog, setShowRunDialog] = useState(false);
+    const [runError, setRunError] = useState('');
 
     // Load template from sessionStorage (set by Templates page)
     useEffect(() => {
@@ -103,12 +106,12 @@ export default function BuilderPage() {
         () => ({
             userPromptTemplate,
             systemPrompt,
-            model: 'gemini-1.5-flash',
+            model: selectedModel,
             temperature,
             maxOutputTokens,
             rows,
         }),
-        [userPromptTemplate, systemPrompt, temperature, maxOutputTokens, rows]
+        [userPromptTemplate, systemPrompt, temperature, maxOutputTokens, rows, selectedModel]
     );
 
     // Validation
@@ -119,8 +122,8 @@ export default function BuilderPage() {
 
     // Run batch job
     const handleRunBatch = useCallback(async () => {
-        if (!apiKey || !apiKeyValid) return;
         setIsRunning(true);
+        setRunError('');
 
         try {
             const deviceId = getDeviceId();
@@ -164,9 +167,10 @@ export default function BuilderPage() {
                     project_id: project.id,
                     template_id: template?.id,
                     name: jobName || `Batch ${new Date().toLocaleString()}`,
+                    queue_status: 'queued',
                     status: 'pending',
                     total_requests: rows.length,
-                    model: 'gemini-1.5-flash',
+                    model: selectedModel,
                     generation_config: { temperature, maxOutputTokens },
                     safety_mode: safetyMode,
                 })
@@ -190,29 +194,53 @@ export default function BuilderPage() {
             await supabase.from('batch_results').insert(resultRows);
 
             // 5. Trigger execution via API route
-            fetch('/api/batch', {
+            let enqueueResponse = await fetch('/api/batch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     jobId: job.id,
-                    apiKey,
                     systemPrompt,
-                    model: 'gemini-1.5-flash',
+                    model: selectedModel,
                     temperature,
                     maxOutputTokens,
                     safetyMode,
                 }),
             });
 
+            // Fallback for local development without server-managed key.
+            if (!enqueueResponse.ok && apiKey && apiKeyValid) {
+                enqueueResponse = await fetch('/api/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jobId: job.id,
+                        apiKey,
+                        systemPrompt,
+                        model: selectedModel,
+                        temperature,
+                        maxOutputTokens,
+                        safetyMode,
+                    }),
+                });
+            }
+
+            if (!enqueueResponse.ok) {
+                const payload = await enqueueResponse.json().catch(() => ({}));
+                throw new Error(payload.error ?? 'Failed to enqueue batch job');
+            }
+
             // 6. Navigate to dashboard
             setShowRunDialog(false);
             router.push('/dashboard');
         } catch (error) {
             console.error('Failed to start batch:', error);
+            setRunError(error instanceof Error ? error.message : 'Failed to start batch');
         } finally {
             setIsRunning(false);
         }
     }, [apiKey, apiKeyValid, systemPrompt, userPromptTemplate, temperature, maxOutputTokens, rows, safetyMode, jobName, router]);
+
+    const effectiveRpm = getEffectiveRpm(selectedModel, safetyMode);
 
     return (
         <div className="space-y-6 h-full">
@@ -232,7 +260,7 @@ export default function BuilderPage() {
 
                 <Button
                     onClick={() => setShowRunDialog(true)}
-                    disabled={!validation.valid || !apiKeyValid}
+                    disabled={!validation.valid}
                     className="gap-2"
                     size="lg"
                 >
@@ -261,6 +289,12 @@ export default function BuilderPage() {
                             {warn}
                         </div>
                     ))}
+                </div>
+            )}
+            {runError && (
+                <div className="flex items-center gap-2 text-sm text-destructive">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    {runError}
                 </div>
             )}
 
@@ -359,12 +393,12 @@ export default function BuilderPage() {
                                 <p className="text-[10px] text-muted-foreground uppercase">Requests</p>
                             </div>
                             <div className="p-3 rounded-lg bg-muted/30">
-                                <p className="text-2xl font-bold">{safetyMode ? '10' : '15'}</p>
+                                <p className="text-2xl font-bold">{effectiveRpm}</p>
                                 <p className="text-[10px] text-muted-foreground uppercase">RPM Limit</p>
                             </div>
                             <div className="p-3 rounded-lg bg-muted/30">
                                 <p className="text-2xl font-bold">
-                                    ~{Math.ceil(rows.length / (safetyMode ? 10 : 15))}m
+                                    ~{Math.ceil(rows.length / effectiveRpm)}m
                                 </p>
                                 <p className="text-[10px] text-muted-foreground uppercase">Est. Time</p>
                             </div>

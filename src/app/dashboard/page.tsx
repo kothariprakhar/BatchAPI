@@ -2,19 +2,20 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase, getDeviceId } from '@/lib/supabase';
-import { JobCard, type Job } from '@/components/job-card';
+import { JobCard, getQueueStatus, type Job } from '@/components/job-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, RefreshCw, Inbox } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useApiKey } from '@/lib/api-key-context';
 
 export default function DashboardPage() {
-    const [deviceId, setDeviceId] = useState<string>('');
-
-    useEffect(() => {
-        setDeviceId(getDeviceId());
-    }, []);
+    const { apiKey } = useApiKey();
+    const [deviceId] = useState<string>(() =>
+        typeof window === 'undefined' ? '' : getDeviceId()
+    );
+    const [actionJobId, setActionJobId] = useState<string | null>(null);
 
     const { data: jobs, isLoading, refetch, isRefetching } = useQuery({
         queryKey: ['jobs', deviceId],
@@ -44,7 +45,70 @@ export default function DashboardPage() {
         refetchInterval: 30000, // Poll every 30 seconds
     });
 
-    const hasRunningJobs = jobs?.some((j) => j.status === 'running' || j.status === 'pending');
+    const hasRunningJobs = jobs?.some((j) => {
+        const queueStatus = getQueueStatus(j);
+        return queueStatus === 'queued' || queueStatus === 'running' || queueStatus === 'paused' || queueStatus === 'retry_wait';
+    });
+    const activeJobIds = useMemo(
+        () =>
+            (jobs ?? [])
+                .filter((j) => {
+                    const queueStatus = getQueueStatus(j);
+                    return (
+                        queueStatus === 'queued' ||
+                        queueStatus === 'running' ||
+                        queueStatus === 'paused' ||
+                        queueStatus === 'retry_wait'
+                    );
+                })
+                .map((j) => j.id),
+        [jobs]
+    );
+
+    useEffect(() => {
+        if (!activeJobIds.length) return;
+        const sources = activeJobIds.map((jobId) => {
+            const source = new EventSource(`/api/jobs/${jobId}/events`);
+            source.onmessage = () => {
+                void refetch();
+            };
+            source.onerror = () => {
+                source.close();
+            };
+            return source;
+        });
+
+        return () => {
+            for (const source of sources) {
+                source.close();
+            }
+        };
+    }, [activeJobIds, refetch]);
+
+    const handleCancelJob = async (job: Job) => {
+        setActionJobId(job.id);
+        try {
+            await fetch(`/api/jobs/${job.id}/cancel`, { method: 'POST' });
+            await refetch();
+        } finally {
+            setActionJobId(null);
+        }
+    };
+
+    const handleResumeJob = async (job: Job) => {
+        setActionJobId(job.id);
+        try {
+            const body = apiKey ? { apiKey } : {};
+            await fetch(`/api/jobs/${job.id}/resume`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            await refetch();
+        } finally {
+            setActionJobId(null);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -87,7 +151,13 @@ export default function DashboardPage() {
             ) : jobs && jobs.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {jobs.map((job) => (
-                        <JobCard key={job.id} job={job} />
+                        <JobCard
+                            key={job.id}
+                            job={job}
+                            onCancel={handleCancelJob}
+                            onResume={handleResumeJob}
+                            actionBusy={actionJobId === job.id}
+                        />
                     ))}
                 </div>
             ) : (

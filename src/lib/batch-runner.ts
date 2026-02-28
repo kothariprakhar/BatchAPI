@@ -4,6 +4,7 @@ import { calculateSavings } from '@/lib/cost-calculator';
 import { getEffectiveRpm } from '@/lib/rate-policy';
 import { RateLimitedQueue } from '@/lib/rate-limited-queue';
 import { classifyError, type ErrorMeta } from '@/lib/error-utils';
+import { evaluateAssertion, normalizeAssertionRule, type AssertionRule } from '@/lib/assertions';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -17,6 +18,7 @@ interface BatchResultRow {
     id: string;
     compiled_prompt: string;
     retry_count: number | null;
+    assertion_rule: AssertionRule | null;
 }
 
 interface ProcessOutcome {
@@ -204,7 +206,7 @@ async function claimNextPendingRow(jobId: string): Promise<BatchResultRow | null
     for (let attempt = 0; attempt < 5; attempt++) {
         const { data: candidate } = await supabase
             .from('batch_results')
-            .select('id, compiled_prompt, retry_count')
+            .select('id, compiled_prompt, retry_count, assertion_rule')
             .eq('job_id', jobId)
             .eq('status', 'pending')
             .order('row_index')
@@ -223,7 +225,7 @@ async function claimNextPendingRow(jobId: string): Promise<BatchResultRow | null
             })
             .eq('id', candidate.id)
             .eq('status', 'pending')
-            .select('id, compiled_prompt, retry_count');
+            .select('id, compiled_prompt, retry_count, assertion_rule');
 
         if (claimedRows && claimedRows.length > 0) {
             return claimedRows[0] as BatchResultRow;
@@ -310,6 +312,7 @@ async function processClaimedRow(
 ): Promise<ProcessOutcome> {
     const supabase = createSupabase();
     const currentRetryCount = row.retry_count ?? 0;
+    const assertionRule = normalizeAssertionRule(row.assertion_rule);
 
     try {
         const generated = await executeWithRetry(genModel, row.compiled_prompt, async (attemptNumber, _meta, delayMs) => {
@@ -324,12 +327,15 @@ async function processClaimedRow(
             await updateJobProgress(jobId, { queue_status: 'running' });
             console.info(`[batch-runner] Job ${jobId} retrying row ${row.id} in ${delayMs}ms`);
         });
+        const assertionResult = evaluateAssertion(generated.responseText, assertionRule);
 
         await supabase
             .from('batch_results')
             .update({
                 status: 'completed',
                 output: generated.responseText,
+                assertion_passed: assertionResult.passed,
+                assertion_result: assertionResult,
                 latency_ms: generated.latencyMs,
                 retry_count: currentRetryCount + generated.retriesUsed,
                 error: null,
@@ -357,6 +363,8 @@ async function processClaimedRow(
                 .from('batch_results')
                 .update({
                     status: 'pending',
+                    assertion_passed: null,
+                    assertion_result: { configured: assertionRule !== null, passed: null, reason: 'Pending due to rate limit retry' },
                     error: error.meta.message,
                     error_code: error.meta.statusCode,
                     error_type: error.meta.errorType,
@@ -380,6 +388,8 @@ async function processClaimedRow(
             .from('batch_results')
             .update({
                 status: 'failed',
+                assertion_passed: null,
+                assertion_result: { configured: assertionRule !== null, passed: null, reason: 'No assertion evaluation on failed request' },
                 error: meta.message,
                 error_code: meta.statusCode,
                 error_type: meta.errorType,

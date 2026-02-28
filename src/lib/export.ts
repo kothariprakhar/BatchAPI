@@ -12,6 +12,8 @@ interface ExportResult {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    assertion_passed: boolean | null;
+    assertion_reason: string | null;
     error: string | null;
 }
 
@@ -28,6 +30,10 @@ interface CompareExportResult {
     right_latency_ms: number | null;
     left_tokens: number;
     right_tokens: number;
+    left_assertion_passed: boolean | null;
+    right_assertion_passed: boolean | null;
+    left_assertion_reason: string | null;
+    right_assertion_reason: string | null;
     pair_status: 'pending' | 'completed' | 'failed';
     changed: boolean;
     length_delta: number;
@@ -56,6 +62,8 @@ export function exportToCsv(results: ExportResult[], jobName: string): void {
         'Prompt Tokens',
         'Completion Tokens',
         'Total Tokens',
+        'Assertion Passed',
+        'Assertion Reason',
         'Error',
     ];
 
@@ -69,6 +77,8 @@ export function exportToCsv(results: ExportResult[], jobName: string): void {
         r.prompt_tokens,
         r.completion_tokens,
         r.total_tokens,
+        r.assertion_passed === null ? '' : r.assertion_passed,
+        escapeCsv(r.assertion_reason ?? ''),
         escapeCsv(r.error ?? ''),
     ]);
 
@@ -103,6 +113,10 @@ export function exportCompareToCsv(results: CompareExportResult[], compareName: 
         'Right Latency (ms)',
         'Left Tokens',
         'Right Tokens',
+        'Left Assertion Passed',
+        'Right Assertion Passed',
+        'Left Assertion Reason',
+        'Right Assertion Reason',
         'Changed',
         'Length Delta',
         'First Difference At',
@@ -125,6 +139,10 @@ export function exportCompareToCsv(results: CompareExportResult[], compareName: 
         result.right_latency_ms ?? '',
         result.left_tokens,
         result.right_tokens,
+        result.left_assertion_passed === null ? '' : result.left_assertion_passed,
+        result.right_assertion_passed === null ? '' : result.right_assertion_passed,
+        escapeCsv(result.left_assertion_reason ?? ''),
+        escapeCsv(result.right_assertion_reason ?? ''),
         result.changed,
         result.length_delta,
         result.first_difference_at,

@@ -46,6 +46,10 @@ interface ComparePair {
     rightLatencyMs: number | null;
     leftTokens: number;
     rightTokens: number;
+    leftAssertionPassed: boolean | null;
+    rightAssertionPassed: boolean | null;
+    leftAssertionReason: string | null;
+    rightAssertionReason: string | null;
     diffSummary: {
         changed: boolean;
         leftLength: number;
@@ -79,6 +83,7 @@ export default function CompareResultsPage() {
     const [changedOnly, setChangedOnly] = useState(false);
     const [flaggedOnly, setFlaggedOnly] = useState(false);
     const [failedOnly, setFailedOnly] = useState(false);
+    const [assertionFailedOnly, setAssertionFailedOnly] = useState(false);
 
     const summaryQuery = useQuery({
         queryKey: ['compare-summary', compareId],
@@ -115,9 +120,16 @@ export default function CompareResultsPage() {
             if (changedOnly && !pair.diffSummary.changed) return false;
             if (flaggedOnly && !Object.values(pair.flags).some(Boolean)) return false;
             if (failedOnly && pair.pairStatus !== 'failed') return false;
+            if (
+                assertionFailedOnly &&
+                pair.leftAssertionPassed !== false &&
+                pair.rightAssertionPassed !== false
+            ) {
+                return false;
+            }
             return true;
         });
-    }, [pairsQuery.data, changedOnly, flaggedOnly, failedOnly]);
+    }, [pairsQuery.data, changedOnly, flaggedOnly, failedOnly, assertionFailedOnly]);
 
     const safeSelectedIndex =
         filteredPairs.length === 0
@@ -140,6 +152,10 @@ export default function CompareResultsPage() {
             right_latency_ms: pair.rightLatencyMs,
             left_tokens: pair.leftTokens,
             right_tokens: pair.rightTokens,
+            left_assertion_passed: pair.leftAssertionPassed,
+            right_assertion_passed: pair.rightAssertionPassed,
+            left_assertion_reason: pair.leftAssertionReason,
+            right_assertion_reason: pair.rightAssertionReason,
             pair_status: pair.pairStatus,
             changed: pair.diffSummary.changed,
             length_delta: pair.diffSummary.lengthDelta,
@@ -169,6 +185,10 @@ export default function CompareResultsPage() {
             right_latency_ms: pair.rightLatencyMs,
             left_tokens: pair.leftTokens,
             right_tokens: pair.rightTokens,
+            left_assertion_passed: pair.leftAssertionPassed,
+            right_assertion_passed: pair.rightAssertionPassed,
+            left_assertion_reason: pair.leftAssertionReason,
+            right_assertion_reason: pair.rightAssertionReason,
             pair_status: pair.pairStatus,
             changed: pair.diffSummary.changed,
             length_delta: pair.diffSummary.lengthDelta,
@@ -246,6 +266,13 @@ export default function CompareResultsPage() {
                     <Button variant={failedOnly ? 'default' : 'outline'} size="sm" onClick={() => setFailedOnly((prev) => !prev)}>
                         Failed only
                     </Button>
+                    <Button
+                        variant={assertionFailedOnly ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setAssertionFailedOnly((prev) => !prev)}
+                    >
+                        Assertion failed only
+                    </Button>
                 </CardContent>
             </Card>
 
@@ -300,6 +327,8 @@ export default function CompareResultsPage() {
                         status={currentPair.leftStatus}
                         latencyMs={currentPair.leftLatencyMs}
                         tokens={currentPair.leftTokens}
+                        assertionPassed={currentPair.leftAssertionPassed}
+                        assertionReason={currentPair.leftAssertionReason}
                     />
                     <ComparePanel
                         title="Right"
@@ -309,6 +338,8 @@ export default function CompareResultsPage() {
                         status={currentPair.rightStatus}
                         latencyMs={currentPair.rightLatencyMs}
                         tokens={currentPair.rightTokens}
+                        assertionPassed={currentPair.rightAssertionPassed}
+                        assertionReason={currentPair.rightAssertionReason}
                     />
 
                     <Card className="xl:col-span-2 bg-card/50">
@@ -365,6 +396,8 @@ function ComparePanel({
     status,
     latencyMs,
     tokens,
+    assertionPassed,
+    assertionReason,
 }: {
     title: string;
     prompt: string;
@@ -373,6 +406,8 @@ function ComparePanel({
     status: string | null;
     latencyMs: number | null;
     tokens: number;
+    assertionPassed: boolean | null;
+    assertionReason: string | null;
 }) {
     const success = status === 'completed';
 
@@ -406,7 +441,18 @@ function ComparePanel({
                     <div className="px-4 py-2 text-[11px] uppercase text-muted-foreground">Output</div>
                     <ScrollArea className="h-[320px]">
                         {success ? (
-                            <div className="text-sm whitespace-pre-wrap break-words p-4">{output}</div>
+                            <div className="text-sm whitespace-pre-wrap break-words p-4">
+                                {output}
+                                {assertionPassed !== null && (
+                                    <div
+                                        className={`mt-3 text-xs ${
+                                            assertionPassed ? 'text-emerald-400' : 'text-red-400'
+                                        }`}
+                                    >
+                                        Assertion {assertionPassed ? 'PASS' : 'FAIL'}{assertionReason ? `: ${assertionReason}` : ''}
+                                    </div>
+                                )}
+                            </div>
                         ) : (
                             <div className="text-sm text-red-400 p-4">{error ?? 'No output yet'}</div>
                         )}

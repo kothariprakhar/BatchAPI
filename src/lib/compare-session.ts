@@ -28,6 +28,10 @@ export interface ComparePairRow {
     rightLatencyMs: number | null;
     leftTokens: number;
     rightTokens: number;
+    leftAssertionPassed: boolean | null;
+    rightAssertionPassed: boolean | null;
+    leftAssertionReason: string | null;
+    rightAssertionReason: string | null;
     diffSummary: CompareDiffSummary;
     flags: CompareFlags;
     pairStatus: 'pending' | 'completed' | 'failed';
@@ -80,7 +84,7 @@ export async function buildComparePairs(compareId: string): Promise<ComparePairR
         resultIds.size > 0
             ? await supabase
                   .from('batch_results')
-                  .select('id, status, output, error, latency_ms, token_usage')
+                  .select('id, status, output, error, latency_ms, token_usage, assertion_passed, assertion_result')
                   .in('id', Array.from(resultIds))
             : { data: [] as Array<Record<string, unknown>> };
 
@@ -119,6 +123,12 @@ export async function buildComparePairs(compareId: string): Promise<ComparePairR
             rightLatencyMs: (right?.latency_ms as number | undefined) ?? null,
             leftTokens: getTotalTokens(left?.token_usage),
             rightTokens: getTotalTokens(right?.token_usage),
+            leftAssertionPassed: (left?.assertion_passed as boolean | undefined) ?? null,
+            rightAssertionPassed: (right?.assertion_passed as boolean | undefined) ?? null,
+            leftAssertionReason:
+                ((left?.assertion_result as { reason?: string } | undefined)?.reason ?? null),
+            rightAssertionReason:
+                ((right?.assertion_result as { reason?: string } | undefined)?.reason ?? null),
             diffSummary,
             flags,
             pairStatus,

@@ -13,6 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -27,6 +34,7 @@ import {
     type VariableRow,
     type CompileOptions,
 } from '@/lib/jsonl-compiler';
+import { type AssertionRule } from '@/lib/assertions';
 import { getEffectiveRpm } from '@/lib/rate-policy';
 import {
     Hammer,
@@ -51,6 +59,7 @@ export default function BuilderPage() {
     const [rows, setRows] = useState<VariableRow[]>([]);
     const [safetyMode, setSafetyMode] = useState(false);
     const [jobName, setJobName] = useState('');
+    const [rowAssertions, setRowAssertions] = useState<Record<string, AssertionRule | null>>({});
 
     // UI state
     const [isRunning, setIsRunning] = useState(false);
@@ -100,6 +109,16 @@ export default function BuilderPage() {
             }));
         });
     }, [variables]);
+
+    useEffect(() => {
+        setRowAssertions((prev) => {
+            const next: Record<string, AssertionRule | null> = {};
+            for (const row of rows) {
+                next[row.id] = prev[row.id] ?? null;
+            }
+            return next;
+        });
+    }, [rows]);
 
     // Compile options
     const compileOptions: CompileOptions = useMemo(
@@ -188,6 +207,7 @@ export default function BuilderPage() {
                     /\{\{(\w+)\}\}/g,
                     (_, key) => row.values[key] ?? `{{${key}}}`
                 ),
+                assertion_rule: rowAssertions[row.id],
                 status: 'pending',
             }));
 
@@ -238,7 +258,7 @@ export default function BuilderPage() {
         } finally {
             setIsRunning(false);
         }
-    }, [apiKey, apiKeyValid, systemPrompt, userPromptTemplate, temperature, maxOutputTokens, rows, safetyMode, jobName, router]);
+    }, [apiKey, apiKeyValid, systemPrompt, userPromptTemplate, temperature, maxOutputTokens, rows, rowAssertions, safetyMode, jobName, router]);
 
     const effectiveRpm = getEffectiveRpm(selectedModel, safetyMode);
 
@@ -340,6 +360,93 @@ export default function BuilderPage() {
                             </CardContent>
                         </Card>
                     </div>
+
+                    <Card className="bg-card/50">
+                        <CardContent className="pt-6 space-y-3">
+                            <div>
+                                <h3 className="text-sm font-medium">Assertions (Optional)</h3>
+                                <p className="text-xs text-muted-foreground">
+                                    Define pass/fail checks per row without extra Gemini API calls.
+                                </p>
+                            </div>
+                            <div className="space-y-2">
+                                {rows.map((row, index) => {
+                                    const assertion = rowAssertions[row.id];
+                                    return (
+                                        <div key={row.id} className="grid grid-cols-1 md:grid-cols-[120px_1fr_80px] gap-2 items-center">
+                                            <Label className="text-xs text-muted-foreground">Row {index + 1}</Label>
+                                            <div className="grid grid-cols-[160px_1fr] gap-2">
+                                                <Select
+                                                    value={assertion?.type ?? 'none'}
+                                                    onValueChange={(value) =>
+                                                        setRowAssertions((prev) => ({
+                                                            ...prev,
+                                                            [row.id]:
+                                                                value === 'none'
+                                                                    ? null
+                                                                    : {
+                                                                          type: value as AssertionRule['type'],
+                                                                          value: prev[row.id]?.value ?? '',
+                                                                      },
+                                                        }))
+                                                    }
+                                                >
+                                                    <SelectTrigger className="h-8 text-xs">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">No assertion</SelectItem>
+                                                        <SelectItem value="contains">Contains text</SelectItem>
+                                                        <SelectItem value="not_contains">Not contains</SelectItem>
+                                                        <SelectItem value="regex">Regex</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <Input
+                                                    className="h-8 text-xs font-mono"
+                                                    placeholder={
+                                                        assertion?.type === 'regex'
+                                                            ? 'e.g. ^\\s*\\{.*\\}\\s*$'
+                                                            : 'Expected text...'
+                                                    }
+                                                    value={assertion?.value ?? ''}
+                                                    disabled={!assertion}
+                                                    onChange={(event) =>
+                                                        setRowAssertions((prev) => {
+                                                            const existing = prev[row.id];
+                                                            return {
+                                                                ...prev,
+                                                                [row.id]: existing
+                                                                    ? {
+                                                                          type: existing.type,
+                                                                          value: event.target.value,
+                                                                      }
+                                                                    : null,
+                                                            };
+                                                        })
+                                                    }
+                                                />
+                                            </div>
+                                            {assertion && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 text-xs"
+                                                    onClick={() =>
+                                                        setRowAssertions((prev) => ({
+                                                            ...prev,
+                                                            [row.id]: null,
+                                                        }))
+                                                    }
+                                                >
+                                                    Clear
+                                                </Button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 <TabsContent value="preview">

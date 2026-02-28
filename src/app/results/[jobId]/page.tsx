@@ -32,6 +32,7 @@ import {
     Zap,
     BarChart3,
     DollarSign,
+    Filter,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useMemo } from 'react';
@@ -45,6 +46,8 @@ interface BatchResult {
     output: string | null;
     token_usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
     latency_ms: number | null;
+    assertion_passed: boolean | null;
+    assertion_result: { configured?: boolean; passed?: boolean | null; reason?: string } | null;
     status: string;
     error: string | null;
 }
@@ -65,6 +68,7 @@ export default function ResultsPage() {
     const params = useParams();
     const jobId = params.jobId as string;
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const [assertionFailedOnly, setAssertionFailedOnly] = useState(false);
 
     // Fetch job details
     const { data: job } = useQuery({
@@ -112,7 +116,18 @@ export default function ResultsPage() {
         };
     }, [results]);
 
-    const currentResult = results?.[selectedIndex];
+    const filteredResults = useMemo(
+        () =>
+            (results ?? []).filter((result) =>
+                assertionFailedOnly ? result.assertion_passed === false : true
+            ),
+        [results, assertionFailedOnly]
+    );
+    const safeSelectedIndex =
+        filteredResults.length === 0
+            ? 0
+            : Math.min(selectedIndex, filteredResults.length - 1);
+    const currentResult = filteredResults[safeSelectedIndex];
 
     // Export handlers
     const handleExportCsv = () => {
@@ -127,6 +142,8 @@ export default function ResultsPage() {
             prompt_tokens: r.token_usage?.promptTokens ?? 0,
             completion_tokens: r.token_usage?.completionTokens ?? 0,
             total_tokens: r.token_usage?.totalTokens ?? 0,
+            assertion_passed: r.assertion_passed,
+            assertion_reason: r.assertion_result?.reason ?? null,
             error: r.error,
         }));
         exportToCsv(exportData, job.name);
@@ -144,6 +161,8 @@ export default function ResultsPage() {
             prompt_tokens: r.token_usage?.promptTokens ?? 0,
             completion_tokens: r.token_usage?.completionTokens ?? 0,
             total_tokens: r.token_usage?.totalTokens ?? 0,
+            assertion_passed: r.assertion_passed,
+            assertion_reason: r.assertion_result?.reason ?? null,
             error: r.error,
         }));
         exportToJson(exportData, job.name);
@@ -174,12 +193,21 @@ export default function ResultsPage() {
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">{job?.name ?? 'Results'}</h1>
                         <p className="text-sm text-muted-foreground">
-                            {job?.model} • {results?.length ?? 0} results
+                            {job?.model} • {filteredResults.length} / {results?.length ?? 0} results
                         </p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <Button
+                        variant={assertionFailedOnly ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setAssertionFailedOnly((prev) => !prev)}
+                        className="gap-2"
+                    >
+                        <Filter className="h-3.5 w-3.5" />
+                        Assertion Failures
+                    </Button>
                     <Button variant="outline" size="sm" onClick={handleExportCsv} className="gap-2">
                         <FileSpreadsheet className="h-3.5 w-3.5" />
                         CSV
@@ -222,27 +250,27 @@ export default function ResultsPage() {
             )}
 
             {/* Result Navigator */}
-            {results && results.length > 0 && (
+            {filteredResults.length > 0 && (
                 <div className="flex items-center gap-3">
                     <Button
                         variant="outline"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => setSelectedIndex(Math.max(0, selectedIndex - 1))}
-                        disabled={selectedIndex === 0}
+                        onClick={() => setSelectedIndex(Math.max(0, safeSelectedIndex - 1))}
+                        disabled={safeSelectedIndex === 0}
                     >
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
 
                     <Select
-                        value={String(selectedIndex)}
+                        value={String(safeSelectedIndex)}
                         onValueChange={(v) => setSelectedIndex(parseInt(v))}
                     >
                         <SelectTrigger className="w-[180px] h-8">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            {results.map((r, i) => (
+                            {filteredResults.map((r, i) => (
                                 <SelectItem key={r.id} value={String(i)}>
                                     <div className="flex items-center gap-2">
                                         {r.status === 'completed' ? (
@@ -261,14 +289,18 @@ export default function ResultsPage() {
                         variant="outline"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => setSelectedIndex(Math.min(results.length - 1, selectedIndex + 1))}
-                        disabled={selectedIndex === results.length - 1}
+                        onClick={() =>
+                            setSelectedIndex(
+                                Math.min(filteredResults.length - 1, safeSelectedIndex + 1)
+                            )
+                        }
+                        disabled={safeSelectedIndex === filteredResults.length - 1}
                     >
                         <ChevronRight className="h-4 w-4" />
                     </Button>
 
                     <span className="text-xs text-muted-foreground">
-                        {selectedIndex + 1} of {results.length}
+                        {safeSelectedIndex + 1} of {filteredResults.length}
                     </span>
 
                     {currentResult?.latency_ms && (
@@ -280,6 +312,18 @@ export default function ResultsPage() {
                             <Badge variant="secondary" className="text-[10px]">
                                 {currentResult.token_usage?.totalTokens ?? 0} tokens
                             </Badge>
+                            {currentResult.assertion_result?.configured && (
+                                <Badge
+                                    variant="secondary"
+                                    className={`text-[10px] ${
+                                        currentResult.assertion_passed
+                                            ? 'text-emerald-400'
+                                            : 'text-red-400'
+                                    }`}
+                                >
+                                    Assertion {currentResult.assertion_passed ? 'PASS' : 'FAIL'}
+                                </Badge>
+                            )}
                         </>
                     )}
                 </div>
@@ -368,6 +412,17 @@ export default function ResultsPage() {
                                     ) : (
                                         <div className="text-sm text-red-400">
                                             {currentResult.error ?? 'Unknown error occurred'}
+                                        </div>
+                                    )}
+                                    {currentResult.assertion_result?.configured && (
+                                        <div
+                                            className={`mt-4 text-xs ${
+                                                currentResult.assertion_passed
+                                                    ? 'text-emerald-400'
+                                                    : 'text-red-400'
+                                            }`}
+                                        >
+                                            Assertion {currentResult.assertion_passed ? 'PASS' : 'FAIL'}: {currentResult.assertion_result.reason}
                                         </div>
                                     )}
                                 </div>

@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS batch_results (
   token_usage JSONB DEFAULT '{}',
   latency_ms INT,
   retry_count INT DEFAULT 0,
+  assertion_rule JSONB,
+  assertion_passed BOOLEAN,
+  assertion_result JSONB DEFAULT '{}',
   error_code INT,
   error_type TEXT,
   status TEXT DEFAULT 'pending'
